@@ -1,0 +1,42 @@
+{
+    "name": "makis83/laravel-bundle",
+    "description": "Basic bundle for Laravel apps",
+    "keywords": [
+        "makis83",
+        "php",
+        "laravel",
+        "bundle"
+    ],
+    "type": "library",
+    "version": "1.0.0",
+    "license": "MIT",
+    "require": {
+        "php": "^8.3",
+        "ext-zlib":  "*",
+        "ext-pgsql": "*",
+        "illuminate/support": "^11.0|^12.0",
+        "illuminate/database": "^11.0|^12.0",
+        "makis83/helpers": "dev-main"
+    },
+    "autoload": {
+        "psr-4": {
+            "Makis83\\LaravelBundle\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Max Ivanooshchik",
+            "email": "webcabmi@gmail.com"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require-dev": {
+        "ext-pcov": "*",
+        "phpunit/phpunit": "^11.0.1",
+        "phpstan/phpstan": "^2.1.x-dev",
+        "thecodingmachine/phpstan-safe-rule": "^1.4",
+        "friendsofphp/php-cs-fixer": "dev-master",
+        "illuminate/cache": "12.x-dev",
+        "illuminate/http": "12.x-dev"
+    }
+}

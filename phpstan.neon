@@ -1,0 +1,11 @@
+includes:
+    - vendor/thecodingmachine/phpstan-safe-rule/phpstan-safe-rule.neon
+
+parameters:
+    level: 7
+    paths:
+        - src
+    excludePaths:
+        - tests
+    bootstrapFiles:
+        - vendor/autoload.php
