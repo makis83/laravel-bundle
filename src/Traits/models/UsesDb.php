@@ -26,7 +26,7 @@ trait UsesDb
     /**
      * Validates that the class using this trait extends the Model class.
      *
-     * @throws InvalidUsageException if the class does not extend Model
+     * @throws InvalidUsageException If the class does not extend Model
      */
     private static function validateModelUsage(): void
     {
@@ -44,7 +44,7 @@ trait UsesDb
      * Get database driver name.
      *
      * @return string Database driver name (```mysql```, ```mariadb```, ```pgsql```, ```sqlite``` or ```sqlsrv```)
-     * @throws InvalidUsageException if the class does not extend Model class
+     * @throws InvalidUsageException If the class does not extend Model class
      */
     public static function dbDriverName(): string
     {
@@ -81,7 +81,7 @@ trait UsesDb
      * Get table name without prefix.
      *
      * @return string Table name without prefix
-     * @throws InvalidUsageException if the class does not extend Model class
+     * @throws InvalidUsageException If the class does not extend Model class
      */
     public static function dbTableName(): string
     {
@@ -94,7 +94,7 @@ trait UsesDb
      * Get table name with prefix.
      *
      * @return string Full table name with prefix
-     * @throws InvalidUsageException if the class does not extend Model class
+     * @throws InvalidUsageException If the class does not extend Model class
      */
     public static function dbFullTableName(): string
     {
@@ -112,7 +112,7 @@ trait UsesDb
      *
      * @param string $column Column name
      * @return string|Expression Full column name
-     * @throws InvalidUsageException if the class does not extend Model class
+     * @throws InvalidUsageException If the class does not extend Model class
      */
     public static function dbFullColumnName(string $column): string|Expression
     {

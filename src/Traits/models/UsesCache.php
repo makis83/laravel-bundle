@@ -161,6 +161,12 @@ trait UsesCache
      */
     public static function cacheStore(): null|string
     {
+        // Try to get data from class property
+        if (property_exists(static::class, 'cacheStore')) {
+            return static::$cacheStore;
+        }
+
+        // Default cache store
         return Config::get('cache.store', 'redis');
     }
 
@@ -172,6 +178,13 @@ trait UsesCache
      */
     public static function cacheTags(): array
     {
+        // Try to get data from class property
+        if (property_exists(static::class, 'cacheTags') && is_array(static::$cacheTags)) {
+            $tags = static::$cacheTags;
+            return [...$tags, static::cacheTagDefault()];
+        }
+
+        // Default cache tag
         return [static::cacheTagDefault()];
     }
 

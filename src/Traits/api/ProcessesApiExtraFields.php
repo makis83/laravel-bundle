@@ -18,18 +18,19 @@ trait ProcessesApiExtraFields
     use UsesCache;
 
     /**
-     * @var null|string[] $extraFields array of extra field names
+     * @var null|string[] $extraFields Array of extra field names
      */
     private static ?array $extraFields = null;
 
     /**
-     * @var string $extraFieldsFieldName name of query parameter
+     * @var string $extraFieldsFieldName Name of query parameter
      */
     public string $extraFieldsFieldName = 'expand';
 
 
     /**
      * Populate extra fields.
+     *
      * @param Request $request Request object
      * @param string[] $fields Additional fields that can be manually added to the list
      * @return void
@@ -75,8 +76,9 @@ trait ProcessesApiExtraFields
 
     /**
      * Sort extra fields.
-     * @param string[] $fields fields that should be sorted
-     * @return array sorted fields
+     *
+     * @param string[] $fields Fields that should be sorted
+     * @return string[] Sorted fields
      */
     private function sortExtraFields(array $fields): array
     {
@@ -98,8 +100,9 @@ trait ProcessesApiExtraFields
 
     /**
      * Return an array of extra fields (optional fields that can be returned in a query).
-     * @param Request $request request object
-     * @param string[] $fields additional fields that can be added to the list
+     *
+     * @param Request $request Request object
+     * @param string[] $fields Additional fields that can be added to the list
      * @return array extra fields
      */
     public function extraFields(Request $request, array $fields = []): array

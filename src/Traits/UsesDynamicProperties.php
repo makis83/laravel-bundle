@@ -19,7 +19,7 @@ trait UsesDynamicProperties
      *
      * @param string $name The name of the property or method
      * @return mixed The value of the property or the return value of the method
-     * @throws PHPRuntimeException if the property or method does not exist
+     * @throws PHPRuntimeException If the property or method does not exist
      */
     final public function __get(string $name): mixed
     {
@@ -44,7 +44,7 @@ trait UsesDynamicProperties
      *
      * @param string $name The name of the property
      * @param mixed $value The value to be set
-     * @return void nothing
+     * @return void
      */
     final public function __set(string $name, mixed $value): void
     {
@@ -77,7 +77,7 @@ trait UsesDynamicProperties
      *
      * @param string $name The name of the property or method to retrieve
      * @return mixed The value of the property or method
-     * @throws PHPRuntimeException if the property or method does not exist
+     * @throws PHPRuntimeException If the property or method does not exist
      */
     final public function getProperty(string $name): mixed
     {

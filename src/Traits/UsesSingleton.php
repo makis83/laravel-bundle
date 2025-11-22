@@ -12,14 +12,15 @@ namespace Makis83\LaravelBundle\Traits;
 trait UsesSingleton
 {
     /**
-     * @var array<string, object> $instances array of class object instances
+     * @var array<string, object> $instances Array of class object instances
      */
     protected static array $instances = [];
 
 
     /**
      * Refreshes the instance.
-     * @return static Self class instance
+     *
+     * @return static Class instance
      */
     final public static function cleanInstance(): static
     {
@@ -29,9 +30,10 @@ trait UsesSingleton
 
     /**
      * Handle dynamic, static calls to the object.
+     *
      * @param string $method Method name
      * @param array<int, mixed> $parameters Array of method arguments
-     * @return mixed
+     * @return mixed Method result
      */
     public static function __callStatic($method, $parameters): mixed
     {
@@ -53,6 +55,7 @@ trait UsesSingleton
 
     /**
      * Returns the class instance.
+     *
      * @param boolean $refresh Whether to get a new instance or return the existing one
      * @return static Class instance
      */

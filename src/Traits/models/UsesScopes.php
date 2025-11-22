@@ -1,9 +1,12 @@
 <?php
+
 namespace Makis83\LaravelBundle\Traits\models;
 
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Database\Eloquent\Builder;
+use Makis83\LaravelBundle\Models\BaseModel;
 use Makis83\LaravelBundle\Exceptions\ExtendedException;
 use InvalidArgumentException as PHPInvalidArgumentException;
 
@@ -14,14 +17,14 @@ use InvalidArgumentException as PHPInvalidArgumentException;
  * Date: 2024-09-29
  * Time: 22:05
  *
- * @method Builder|static active() return only active items
- * @method Builder|static inactive() return only inactive items
- * @method Builder|static filterByStrictValues(string $column, null|string|int|float|array $values = [], ?string $alias = null) filter data by strict values
- * @method Builder|static filterByLikeValues(string $column, null|string|int|float|array $values = [], ?string $alias = null) filter items by given values using 'LIKE' operator
- * @method Builder|static filterByUnixtime(string $column, ?int $unixtimeMin = null, ?int $unixtimeMax = null, ?string $alias = null, ?Carbon $dateMin = null, ?Carbon $dateMax = null) filter items by min and max unixtime value
- * @method Builder|static sortByDemand(?string $sort = null) sort model by the provided sort settings
- * @method Builder|static paginateByDemand(string|int $page = 1, string|int $perPage = 0) paginate data
- * @method Builder|static sortAndPaginate(?string $sort = null, string|int $page = 1, string|int $perPage = 0) sort and paginate model's data
+ * @method Builder<static>|static active() Return only active items
+ * @method Builder<static>|static inactive() Return only inactive items
+ * @method Builder<static>|static filterByStrictValues(string $column, null|string|int|float|array<int, mixed> $values = [], ?string $alias = null) Filter data by strict values
+ * @method Builder<static>|static filterByLikeValues(string $column, null|string|int|float|array<int, mixed> $values = [], ?string $alias = null) Filter items by given values using 'LIKE' operator
+ * @method Builder<static>|static filterByUnixtime(string $column, ?int $unixtimeMin = null, ?int $unixtimeMax = null, ?string $alias = null, ?Carbon $dateMin = null, ?Carbon $dateMax = null) Filter items by min and max unixtime value
+ * @method Builder<static>|static sortByDemand(?string $sort = null) Sort model by the provided sort settings
+ * @method Builder<static>|static paginateByDemand(string|int $page = 1, string|int $perPage = 0) Paginate data
+ * @method Builder<static>|static sortAndPaginate(?string $sort = null, string|int $page = 1, string|int $perPage = 0) Sort and paginate model's data
  *
  * @see static::scopeSortByDemand()
  * @see static::scopePaginateByDemand()
@@ -34,46 +37,97 @@ use InvalidArgumentException as PHPInvalidArgumentException;
  */
 trait UsesScopes
 {
-    /**
-     * @var array<string, array> $sort sort settings for using in a data provider
-     */
-    private static array $sortDefault = [
-        'attributes' => ['id'],
-        'defaultOrder' => [
-            'id' => 'ASC'
-        ]
-    ];
+    use UsesDb;
 
 
     /**
-     * Parse sort attributes.
-     * @return array special array with column alias as array key and full column name as value
-     * @throws PHPInvalidArgumentException
+     * Parse sort sequence used in API queries.
+     *
+     * @param null|string $sortSequence Sort string
+     * ```
+     * first_name,-last_name,-status,email
+     * ```
+     * @return array<string, 'asc'|'desc'> Special array with sort column names as index and sort order as value
+     * ```
+     * ['first_name' => 'asc', 'last_name' => 'desc', 'status' => 'desc', 'email' => 'asc']
+     * ```
      */
-    protected static function parseSortAttributes(): array
+    protected static function parseSortSequence(?string $sortSequence = null): array
     {
-        // get model sort settings
+        // Check if sequence is empty
+        if ('' === trim($sortSequence)) {
+            return [];
+        }
+
+        // Split string into array
+        $sortSequenceArr = explode(',', $sortSequence);
+        $sortSequenceArr = array_map('trim', $sortSequenceArr);
+        if (empty($sortSequenceArr)) {
+            return [];
+        }
+
+        // Initial sort array
+        $sort = [];
+
+        // Get charset
+        $charset = Config::get('app.charset', 'UTF-8');
+
+        // Loop through sequence parts
+        foreach ($sortSequenceArr as $part) {
+            // Check if the first char is '-'
+            if (0 === mb_strpos($part, '-', 0, $charset)) {
+                $sort[mb_substr($part, 1, null, $charset)] = 'desc';
+            } else {
+                $sort[$part] = 'asc';
+            }
+        }
+
+        // Return result array
+        return $sort;
+    }
+
+
+    /**
+     * Get model sort settings.
+     *
+     * @return array{attributes: string[], defaultOrder: array<string, string>} Model sort settings
+     */
+    protected static function getModelSortSettings(): array
+    {
         if (
             property_exists(static::class, 'sort') &&
             is_array(static::$sort) &&
             !empty(static::$sort)
         ) {
-            $modelSortSettings = static::$sort;
-        } else {
-            $modelSortSettings = static::$sortDefault;
+            return static::$sort;
         }
 
-        // initial sort attributes array
+        return BaseModel::$sort;
+    }
+
+
+    /**
+     * Parse sort attributes.
+     *
+     * @return array<string, string> Special array with column alias as array key and full column name as value
+     * @throws PHPInvalidArgumentException
+     */
+    protected static function parseSortAttributes(): array
+    {
+        // Get model sort settings
+        $modelSortSettings = static::getModelSortSettings();
+
+        // Initial sort attributes array
         $sortAttributes = [];
 
-        // loop through raw model sort attributes
+        // Loop through raw model sort attributes
         if (
             array_key_exists('attributes', $modelSortSettings) &&
             is_array($modelSortSettings['attributes']) &&
             !empty($modelSortSettings['attributes'])
         ) {
             foreach ($modelSortSettings['attributes'] as $key => $value) {
-                // check if key is numeric
+                // Check if key is numeric
                 if (is_numeric($key)) {
                     $sortAttributes[$value] = $value;
                 } elseif (is_array($value) && array_key_exists(0, $value) && is_callable($value[0])) {
@@ -94,86 +148,80 @@ trait UsesScopes
 
     /**
      * Sort data collection with provided settings.
-     * @param static|Builder $query Query builder
+     *
+     * @param static|Builder<static> $query Query builder
      * @param null|string $sort Sort sequence
-     * @return static|Builder query builder
+     * @return static|Builder<static> Query builder
      */
     public function scopeSortByDemand(self|Builder $query, ?string $sort = null): static|Builder
     {
-        // get model sort settings
-        if (
-            property_exists(static::class, 'sort') &&
-            is_array(static::$sort) &&
-            !empty(static::$sort)
-        ) {
-            $modelSortSettings = static::$sort;
-        } else {
-            $modelSortSettings = static::$sortDefault;
-        }
+        // Get model sort settings
+        $modelSortSettings = static::getModelSortSettings();
 
-        // generate an array of sort attributes from data provided by user
+        // Generate an array of sort attributes from data provided by user
         $userSortSettings = static::parseSortSequence($sort);
 
-        // get sort settings from model if user order is not specified
+        // Get sort settings from model if user order is not specified
         if (
             empty($userSortSettings) &&
-            is_array($modelSortSettings) &&
             array_key_exists('defaultOrder', $modelSortSettings) &&
             !empty($modelSortSettings['defaultOrder'])
         ) {
             $userSortSettings = $modelSortSettings['defaultOrder'];
         }
 
-        // get available attributes for model sort
+        // Get available attributes for model sort
         $modelAvailableSortAttributes = static::parseSortAttributes();
 
-        // loop through user sort settings
+        // Loop through user sort settings
         foreach ($userSortSettings as $column => $order) {
-            // skip if column is not allowed
+            // Skip if column is not allowed
             if (!array_key_exists($column, $modelAvailableSortAttributes)) {
                 continue;
             }
 
-            // sort
+            // Sort
             $query->orderBy(DB::raw($modelAvailableSortAttributes[$column]), $order);
         }
 
-        // return builder
+        // Return builder
         return $query;
     }
 
 
     /**
      * Paginate data by demand.
-     * @param static|Builder $query query builder
-     * @param string|int $page page to show
-     * @param string|int $perPage items per page
-     * @return static|Builder query builder
+     *
+     * @param static|Builder<static> $query Query builder
+     * @param string|int $page Page to show
+     * @param string|int $perPage Number of items per page
+     * @return static|Builder<static> Query builder
      */
     public function scopePaginateByDemand(
         self|Builder $query,
         string|int $page = 1,
         string|int $perPage = 0
     ): static|Builder {
-        // cast arguments to int
+        // Cast arguments to int
         $page = (int) $page;
         $perPage = (int) $perPage;
 
-        // deal with pagination
+        // Deal with pagination
         if (($page >= 1) && ($perPage >= 1)) {
             // $query->offset(($page - 1) * $perPage)->limit($perPage);
             $query->paginate(perPage: $perPage, page: $page);
         }
 
-        // return builder
+        // Return builder
         return $query;
     }
 
 
     /**
      * Return only active items.
-     * @param static|Builder $query
-     * @return static|Builder query builder
+     *
+     * @param static|Builder<static> $query Query builder
+     * @return static|Builder Query builder
      */
     public function scopeActive(self|Builder $query): static|Builder
     {
@@ -183,8 +231,9 @@ trait UsesScopes
 
     /**
      * Return only inactive items.
-     * @param static|Builder $query
-     * @return static|Builder query builder
+     *
+     * @param static|Builder<static> $query Query builder
+     * @return static|Builder<static> Query builder
      */
     public function scopeInactive(self|Builder $query): static|Builder
     {
@@ -194,11 +243,12 @@ trait UsesScopes
 
     /**
      * Filter data by strict values.
-     * @param static|Builder $query query builder
-     * @param string $column column name
-     * @param null|string|int|float|array<int, null|string|int|float> $values values
-     * @param null|string $alias table alias
-     * @return static|Builder query builder
+     *
+     * @param static|Builder<static> $query Query builder
+     * @param string $column Column name
+     * @param null|string|int|float|array<int, null|string|int|float> $values Values
+     * @param null|string $alias Table alias
+     * @return static|Builder<static> Query builder
      */
     public function scopeFilterByStrictValues(
         self|Builder $query,
@@ -206,18 +256,18 @@ trait UsesScopes
         null|string|int|float|array $values = [],
         ?string $alias = null
     ): static|Builder {
-        // check if values is not an array
+        // Check if values is not an array
         if (!is_array($values)) {
             $values = [$values];
         }
 
-        // filter by values
+        // Filter by values
         if (!empty($values)) {
-            // get full column name
-            $tableName = static::getTableName();
+            // Get full column name
+            $tableName = $this->getTable();
             $column = $alias ? $alias . '.' . $column : $tableName . '.' . $column;
 
-            // apply conditions
+            // Apply conditions
             return $query->where(static function (self|Builder $query) use ($column, $values) {
                 foreach ($values as $value) {
                     if (null === $value) {
@@ -229,18 +279,19 @@ trait UsesScopes
             });
         }
 
-        // default case
+        // Default case
         return $query;
     }
 
 
     /**
      * Filter items by given values using 'LIKE' operator.
-     * @param static|Builder $query query builder
-     * @param string $column column name
-     * @param null|string|int|float|array<int, null|string|int|float> $values values
-     * @param null|string $alias table alias
-     * @return static|Builder query builder
+     *
+     * @param static|Builder<static> $query Query builder
+     * @param string $column Column name
+     * @param null|string|int|float|array<int, null|string|int|float> $values Values
+     * @param null|string $alias Table alias
+     * @return static|Builder<static> query builder
      */
     public function scopeFilterByLikeValues(
         self|Builder $query,
@@ -248,33 +299,33 @@ trait UsesScopes
         null|string|int|float|array $values = [],
         ?string $alias = null
     ): static|Builder {
-        // check if values is not an array
+        // Cast values to array
         if (!is_array($values)) {
             $values = [$values];
         }
 
-        // filter
+        // Filter
         if (!empty($values)) {
-            // get app charset
-            $charset = config('app.charset');
+            // Get app charset
+            $charset = Config::get('app.charset', 'UTF-8');
 
-            // get full column name
-            $tableName = static::getTableName();
+            // Get full column name
+            $tableName = $this->getTable();
             $column = $alias ? $alias . '.' . $column : $tableName . '.' . $column;
 
-            // result query
+            // Result query
             return $query->where(static function (self|Builder $query) use ($charset, $column, $values) {
-                // loop through values and populate conditions array
+                // Loop through values and populate conditions array
                 foreach ($values as $value) {
                     if (null === $value) {
                         $query->orWhereNull($column);
                     } else {
-                        // skip if the value is too short
+                        // Skip if the value is too short
                         if (!is_string($value) || (mb_strlen($value, $charset) < 2)) {
                             continue;
                         }
 
-                        // check if this value has a percent char at the beginning or at the end
+                        // Check if this value has a percent char at the beginning or at the end
                         if ((0 === mb_strpos($value, '%', 0, $charset)) || ('%' === mb_substr($value, -1, 1, $charset))) {
                             $query->orWhereLike($column, $value);
                         } else {
@@ -292,73 +343,50 @@ trait UsesScopes
 
     /**
      * Filter items by unixtime.
-     * @param static|Builder $query query builder
-     * @param string $column column name
-     * @param null|string|int $unixtimeMin min unixtime
-     * @param null|string|int $unixtimeMax max unixtime
-     * @param null|string $alias table alias
-     * @param Carbon|null $dateMin min allowed date
-     * @param Carbon|null $dateMax max allowed date
-     * @return static|Builder query builder
-     * @throws ExtendedException
+     *
+     * @param static|Builder<static> $query Query builder
+     * @param string $column Column name
+     * @param null|string|int $unixtimeMin Min unixtime
+     * @param null|string|int $unixtimeMax Max unixtime
+     * @param null|string $alias Table alias
+     * @return static|Builder<static> Query builder
+     * @throws ExtendedException If something went wrong
      */
     public function scopeFilterByUnixtime(
         self|Builder $query,
         string $column = 'created_at',
         null|string|int $unixtimeMin = null,
         null|string|int $unixtimeMax = null,
-        ?string $alias = null,
-        ?Carbon $dateMin = null,
-        ?Carbon $dateMax = null
+        ?string $alias = null
     ): static|Builder {
-        // get full column name
+        // Get full column name
         $tableName = $this->getTable();
         $column = $alias ? $alias . '.' . $column : $tableName . '.' . $column;
 
-        // filter by start unixtime
+        // Filter by start unixtime
         if (isset($unixtimeMin)) {
-            // get date object
             $dateFrom = Carbon::createFromTimestamp($unixtimeMin);
-
-            // validate
-            if ($dateMin && $dateFrom->lt($dateMin)) {
-                throw new ExtendedException(
-                    422,
-                    __('response.model.common.error.unixtime_from_too_early', [
-                        'date' => $dateMin->toDateTimeString()
-                    ])
-                );
-            }
-
-            // filter
             $query->where($column, '>=', $dateFrom->toDateTimeString());
         }
 
-        // filter by end unixtime
+        // Filter by end unixtime
         if (isset($unixtimeMax)) {
-            // get date object
+            // Get date object
             $dateTo = Carbon::createFromTimestamp($unixtimeMax);
 
-            // validate
-            if ($dateMax && $dateTo->gt($dateMax)) {
-                throw new ExtendedException(
-                    422,
-                    __('response.model.common.error.unixtime_to_too_late')
-                );
-            }
-
+            // Validate
             if (isset($dateFrom) && $dateFrom->gt($dateTo)) {
                 throw new ExtendedException(
                     422,
-                    __('response.model.common.error.unixtime_from_too_late')
+                    'Invalid date range. End date cannot be earlier than start date.'
                 );
             }
 
-            // filter
+            // Filter
             $query->where($column, '<=', $dateTo->toDateString());
         }
 
-        // return query
+        // Return query
         return $query;
     }
 
@@ -383,35 +411,39 @@ trait UsesScopes
 
     /**
      * Normalize filter array.
-     * @param string|string[] $values array with values
-     * @param int $minLength min length
-     * @param bool $toLowercase whether to make all values lowercase
-     * @return array normalized array
+     *
+     * @param string|string[] $values Array with values
+     * @param int $minLength Min length
+     * @param bool $toLowercase Whether to make all values lowercase
+     * @return array Normalized array
      */
     public static function normalizeFilterArray(
         array $values = [],
         int $minLength = 2,
         bool $toLowercase = false
     ): array {
-        // transform a string value to array
+        // Cast value to array
         if (is_string($values)) {
             $values = [$values];
         }
 
-        // check if values array is empty
+        // Check if values array is empty
         if (empty($values)) {
             return $values;
         }
 
-        // populate normalized array
+        // Get charset
+        $charset = Config::get('app.charset', 'UTF-8');
+
+        // Populate normalized array
         $valuesNormalized = [];
         foreach ($values as $value) {
-            if (is_string($value) && (!$minLength || (mb_strlen($value, config('app.charset')) >= $minLength))) {
-                $valuesNormalized[] = $toLowercase ? mb_strtolower($value, config('app.charset')) : $value;
+            if (is_string($value) && (!$minLength || (mb_strlen($value, $charset) >= $minLength))) {
+                $valuesNormalized[] = $toLowercase ? mb_strtolower($value, $charset) : $value;
             }
         }
 
-        // clean from duplicates
+        // Clean from duplicates
         return array_keys(array_flip($valuesNormalized));
     }
 }
