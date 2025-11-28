@@ -2,11 +2,14 @@
 
 namespace Makis83\LaravelBundle\Traits\models;
 
-use Illuminate\Support\Carbon;
+use Carbon\Carbon;
+use DateTimeInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
+use Makis83\LaravelBundle\Helpers\Date;
 use Illuminate\Database\Eloquent\Builder;
 use Makis83\LaravelBundle\Models\BaseModel;
+use Carbon\Exceptions\InvalidFormatException;
 use Makis83\LaravelBundle\Exceptions\ExtendedException;
 use InvalidArgumentException as PHPInvalidArgumentException;
 
@@ -21,7 +24,8 @@ use InvalidArgumentException as PHPInvalidArgumentException;
  * @method Builder<static>|static inactive() Return only inactive items
  * @method Builder<static>|static filterByStrictValues(string $column, null|string|int|float|array<int, mixed> $values = [], ?string $alias = null) Filter data by strict values
  * @method Builder<static>|static filterByLikeValues(string $column, null|string|int|float|array<int, mixed> $values = [], ?string $alias = null) Filter items by given values using 'LIKE' operator
- * @method Builder<static>|static filterByUnixtime(string $column, ?int $unixtimeMin = null, ?int $unixtimeMax = null, ?string $alias = null, ?Carbon $dateMin = null, ?Carbon $dateMax = null) Filter items by min and max unixtime value
+ * @method Builder<static>|static filterByTimeRange(string $column, null|string|int|DateTimeInterface|Carbon $from, null|string|int|DateTimeInterface|Carbon $to, ?string $alias = null) Filter items by time range
+ * @method Builder<static>|static filterByTimePeriod(string $column, null|string $period, ?string $alias = null) Filter items by time period
  * @method Builder<static>|static sortByDemand(?string $sort = null) Sort model by the provided sort settings
  * @method Builder<static>|static paginateByDemand(string|int $page = 1, string|int $perPage = 0) Paginate data
  * @method Builder<static>|static sortAndPaginate(?string $sort = null, string|int $page = 1, string|int $perPage = 0) Sort and paginate model's data
@@ -33,7 +37,8 @@ use InvalidArgumentException as PHPInvalidArgumentException;
  * @see static::scopeInactive()
  * @see static::scopeFilterByStrictValues()
  * @see static::scopeFilterByLikeValues()
- * @see static::scopeFilterByUnixtime()
+ * @see static::scopeFilterByTimeRange()
+ * @see static::scopeFilterByTimePeriod()
  */
 trait UsesScopes
 {
@@ -342,51 +347,125 @@ trait UsesScopes
 
 
     /**
-     * Filter items by unixtime.
+     * Filter data by time range.
      *
-     * @param static|Builder<static> $query Query builder
+     * @param Builder<static> $query Query builder
      * @param string $column Column name
-     * @param null|string|int $unixtimeMin Min unixtime
-     * @param null|string|int $unixtimeMax Max unixtime
+     * @param null|string|int|DateTimeInterface|Carbon $from From
+     * @param null|string|int|DateTimeInterface|Carbon $to To
      * @param null|string $alias Table alias
-     * @return static|Builder<static> Query builder
-     * @throws ExtendedException If something went wrong
+     * @return Builder<static> Filtered query builder
+     * @throws InvalidFormatException If dates are invalid
+     * @throws ExtendedException If the first date is greater than the second one
      */
-    public function scopeFilterByUnixtime(
-        self|Builder $query,
-        string $column = 'created_at',
-        null|string|int $unixtimeMin = null,
-        null|string|int $unixtimeMax = null,
-        ?string $alias = null
-    ): static|Builder {
+    public function scopeFilterByTimeRange(
+        Builder $query,
+        string $column,
+        null|string|int|DateTimeInterface|Carbon $from = null,
+        null|string|int|DateTimeInterface|Carbon $to = null,
+        null|string $alias = null
+    ): Builder {
         // Get full column name
         $tableName = $this->getTable();
         $column = $alias ? $alias . '.' . $column : $tableName . '.' . $column;
 
-        // Filter by start unixtime
-        if (isset($unixtimeMin)) {
-            $dateFrom = Carbon::createFromTimestamp($unixtimeMin);
-            $query->where($column, '>=', $dateFrom->toDateTimeString());
+        // Get Carbon instances for dates
+        $fromCarbon = Date::toCarbon($from);
+        $toCarbon = Date::toCarbon($to);
+
+        if ($fromCarbon !== null) {
+            $query->where($column, '>=', $fromCarbon);
         }
 
-        // Filter by end unixtime
-        if (isset($unixtimeMax)) {
-            // Get date object
-            $dateTo = Carbon::createFromTimestamp($unixtimeMax);
-
+        if ($toCarbon !== null) {
             // Validate
-            if (isset($dateFrom) && $dateFrom->gt($dateTo)) {
+            if (isset($fromCarbon) && $fromCarbon->gt($toCarbon)) {
                 throw new ExtendedException(
                     422,
                     'Invalid date range. End date cannot be earlier than start date.'
                 );
             }
 
-            // Filter
-            $query->where($column, '<=', $dateTo->toDateString());
+            $query->where($column, '<=', $toCarbon);
         }
 
-        // Return query
+        return $query;
+    }
+
+
+    /**
+     * Filter data by time period.
+     *
+     * @param Builder<static> $query Query builder
+     * @param string $column Column name
+     * @param null|string $period Time period
+     * @param null|string $alias Table alias
+     * @return Builder<static> Filtered query builder
+     */
+    public function scopeFilterByTimePeriod(
+        Builder $query,
+        string $column,
+        string $period = null,
+        null|string $alias = null
+    ): Builder {
+        // Validate period
+        $periods = ['today', '24h', 'yesterday', 'this_week', 'last_week', '7d', 'this_month', 'last_month', '1month'];
+        if ((null !== $period) && !in_array($period, $periods, true)) {
+            throw new InvalidFormatException('Invalid time period.');
+        }
+
+        // Get full column name
+        $tableName = $this->getTable();
+        $column = $alias ? $alias . '.' . $column : $tableName . '.' . $column;
+
+        // Get current date
+        $now = Carbon::now();
+
+        // Filter items
+        switch ($period) {
+            case '24h':
+                $from = $now->subHours(24);
+                $query->where($column, '>=', $from);
+                break;
+            case 'yesterday':
+                $yesterday = $now->subDay();
+                $query->whereDate($column, $yesterday->toDateString());
+                break;
+            case 'this_week':
+                $startOfWeek = $now->startOfWeek();
+                $endOfWeek = $now->endOfWeek();
+                $query->whereBetween($column, [$startOfWeek, $endOfWeek]);
+                break;
+            case 'last_week':
+                $startOfLastWeek = $now->subWeek()->startOfWeek();
+                $endOfLastWeek = $now->endOfWeek();
+                $query->whereBetween($column, [$startOfLastWeek, $endOfLastWeek]);
+                break;
+            case '7d':
+                $from = $now->subDays(7);
+                $query->where($column, '>=', $from);
+                break;
+            case 'this_month':
+                $startOfMonth = $now->startOfMonth();
+                $endOfMonth = $now->endOfMonth();
+                $query->whereBetween($column, [$startOfMonth, $endOfMonth]);
+                break;
+            case 'last_month':
+                $startOfLastMonth = $now->subMonth()->startOfMonth();
+                $endOfLastMonth = $now->endOfMonth();
+                $query->whereBetween($column, [$startOfLastMonth, $endOfLastMonth]);
+                break;
+            case '1month':
+                $from = $now->subMonth();
+                $query->where($column, '>=', $from);
+                break;
+            default:
+                // 'today'
+                $query->whereDate($column, $now->toDateString());
+                break;
+        }
+
+        // Result
         return $query;
     }
 
