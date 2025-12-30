@@ -2,8 +2,8 @@
 
 namespace Makis83\LaravelBundle\Helpers;
 
-use Carbon\Carbon;
 use DateTimeInterface;
+use Illuminate\Support\Carbon;
 use Carbon\Exceptions\InvalidFormatException;
 
 /**
