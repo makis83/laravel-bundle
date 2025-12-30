@@ -18,20 +18,28 @@ class Date
     /**
      * Returns Carbon instance for the given date.
      *
-     * @param null|string|int|DateTimeInterface|Carbon $date Original date
+     * @param null|string|int|float|DateTimeInterface|Carbon $date Original date
      * @return null|Carbon Carbon instance or null
      * @throws InvalidFormatException If date is invalid
      */
-    public static function toCarbon(null|string|int|DateTimeInterface|Carbon $date): ?Carbon
+    public static function toCarbon(null|string|int|float|DateTimeInterface|Carbon $date): ?Carbon
     {
+        // Check if date is null
         if (null === $date) {
             return null;
         }
 
+        // Check if date is already a Carbon instance
         if ($date instanceof Carbon) {
             return $date;
         }
 
+        // Check if date is a float or integer
+        if (is_float($date) || is_int($date)) {
+            return Carbon::createFromTimestamp($date);
+        }
+
+        // Default case
         return Carbon::parse($date);
     }
 }
