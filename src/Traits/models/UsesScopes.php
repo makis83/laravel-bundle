@@ -4,6 +4,7 @@ namespace Makis83\LaravelBundle\Traits\models;
 
 use Carbon\Carbon;
 use DateTimeInterface;
+use Makis83\Helpers\Text;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
 use Makis83\LaravelBundle\Helpers\Date;
@@ -454,7 +455,7 @@ trait UsesScopes
         return $query->where(static function (Builder $innerQuery) use ($column, $terms) {
             foreach ($terms as $term) {
                 // Convert "%peter%" to "peter:*"
-                $clean = trim($term, '%');
+                $clean = Text::fixSpaces(trim($term, '%'));
                 $tsQuery = implode(' & ', explode(' ', $clean)) . ':*';
 
                 // Skip if length is too short
