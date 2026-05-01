@@ -296,7 +296,7 @@ trait UsesScopes
      * @param string $column Column name
      * @param null|string|int|float|array<int, null|string|int|float> $values Values
      * @param null|string $alias Table alias
-     * @return static|Builder<static> query builder
+     * @return static|Builder<static> Filtered Query builder
      */
     public function scopeFilterByLikeValues(
         self|Builder $query,
@@ -343,6 +343,123 @@ trait UsesScopes
 
         // return query
         return $query;
+    }
+
+
+    /**
+     * Filters model's concatenated columns by given values.
+     *
+     * @param Builder<static> $query Query builder
+     * @param string|string[] $searchPatterns Array of search patterns
+     * @param string[] $fields Field names for concatenation
+     * @param string $separator Separator
+     * @return static|Builder<static> Filtered Query builder
+     */
+    public function scopeFilterByConcatValues(
+        Builder $query,
+        string|array $searchPatterns,
+        array $fields,
+        string $separator = ' '
+    ): static|Builder {
+        // Cast patterns to array if it is string
+        $searchPatterns = is_string($searchPatterns) ? [$searchPatterns] : $searchPatterns;
+
+        // Skip if arrays are empty
+        if (empty($searchPatterns) || empty($fields)) {
+            return $query;
+        }
+
+        // Get existing columns
+        $existingColumns = $this->getConnection()
+            ->getSchemaBuilder()
+            ->getColumnListing($this->getTable());
+
+        // Get safe fields
+        $safeFields = array_values(
+            array_filter($fields, static fn(string $field) => in_array($field, $existingColumns, true))
+        );
+
+        if (empty($safeFields)) {
+            return $query;
+        }
+
+        // Quote columns using the DB connection grammar
+        $grammar = $query->getQuery()->getGrammar();
+        $driver = $query->getConnection()->getDriverName();
+
+        $wrappedColumns = array_map(
+            static fn (string $column) => "COALESCE(" . $grammar->wrap($column) . ", '')",
+            $safeFields
+        );
+
+        // Build concat expression
+        if ($driver === 'pgsql') {
+            $concatExpression = implode(" || '$separator' || ", $wrappedColumns);
+            $operator = 'ILIKE';
+        } else {
+            $concatExpression = "CONCAT(" . implode(", '$separator', ", $wrappedColumns) . ")";
+            $operator = 'LIKE';
+        }
+
+        // Filter data
+        return $query->where(function (Builder $innerQuery) use ($searchPatterns, $concatExpression, $operator) {
+            foreach ($searchPatterns as $pattern) {
+                $innerQuery->orWhereRaw("$concatExpression $operator ?", [$pattern]);
+            }
+        });
+    }
+
+
+    /**
+     * Filter data by full-text search.
+     *
+     * @param Builder<static> $query Query builder
+     * @param string $column Column name
+     * @param string|string[] $terms Array of search terms
+     * @return Builder<static> Filtered Query builder
+     */
+    public function scopeFullTextSearch(Builder $query, string $column, string|array $terms): Builder
+    {
+        // Cast terms to array if it is string
+        $terms = is_string($terms) ? [$terms] : $terms;
+
+        // Skip if terms are empty
+        if (empty($terms)) {
+            return $query;
+        }
+
+        // Get existing columns
+        $existingColumns = $this->getConnection()
+            ->getSchemaBuilder()
+            ->getColumnListing($this->getTable());
+
+        // Validate column name
+        if (!in_array($column, $existingColumns, true)) {
+            return $query;
+        }
+
+        // Full column name
+        $column = $this->getTable() . '.' . $column;
+
+        // Filter data
+        return $query->where(static function (Builder $innerQuery) use ($column, $terms) {
+            foreach ($terms as $term) {
+                // Convert "%peter%" to "peter:*"
+                $clean = trim($term, '%');
+                $tsQuery = implode(' & ', explode(' ', $clean)) . ':*';
+
+                // Skip if length is too short
+                if (grapheme_strlen($tsQuery) < 2) {
+                    continue;
+                }
+
+                // Add to query
+                $innerQuery->orWhereRaw(
+                    "? @@ to_tsquery('simple', ?)",
+                    [$column, $tsQuery]
+                );
+            }
+        });
     }
 
 
