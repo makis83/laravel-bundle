@@ -446,7 +446,6 @@ trait UsesScopes
 
         // Full column name
         $grammar = $query->getQuery()->getGrammar();
-        $column = $grammar->wrap($this->getTable() . '.' . $column);
         $column = $alias
             ? $alias . '.' . $grammar->wrap($column)
             : $grammar->wrap($this->getTable() . '.' . $column);
