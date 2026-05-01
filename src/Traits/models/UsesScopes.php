@@ -24,6 +24,7 @@ use InvalidArgumentException as PHPInvalidArgumentException;
  * @method Builder<static>|static inactive() Return only inactive items
  * @method Builder<static>|static filterByStrictValues(string $column, null|string|int|float|array<int, mixed> $values = [], ?string $alias = null) Filter data by strict values
  * @method Builder<static>|static filterByLikeValues(string $column, null|string|int|float|array<int, mixed> $values = [], ?string $alias = null) Filter items by given values using 'LIKE' operator
+ * @method Builder<static>|static filterByFullText(string $column, string|string[] $values = [], ?string $alias = null) Use full text search for filtering items
  * @method Builder<static>|static filterByTimeRange(string $column, null|string|int|DateTimeInterface|Carbon $from, null|string|int|DateTimeInterface|Carbon $to, ?string $alias = null) Filter items by time range
  * @method Builder<static>|static filterByTimePeriod(string $column, null|string $period, ?string $alias = null) Filter items by time period
  * @method Builder<static>|static sortByDemand(?string $sort = null) Sort model by the provided sort settings
@@ -415,13 +416,18 @@ trait UsesScopes
      *
      * @param Builder<static> $query Query builder
      * @param string $column Column name
-     * @param string|string[] $terms Array of search terms
+     * @param string|string[] $values Array of search terms
+     * @param null|string $alias Table alias
      * @return Builder<static> Filtered Query builder
      */
-    public function scopeFullTextSearch(Builder $query, string $column, string|array $terms): Builder
-    {
+    public function scopeFilterByFullText(
+        Builder $query,
+        string $column,
+        string|array $values,
+        null|string $alias = null
+    ): Builder {
         // Cast terms to array if it is string
-        $terms = is_string($terms) ? [$terms] : $terms;
+        $terms = is_string($values) ? [$values] : $values;
 
         // Skip if terms are empty
         if (empty($terms)) {
@@ -439,7 +445,11 @@ trait UsesScopes
         }
 
         // Full column name
-        $column = $this->getTable() . '.' . $column;
+        $grammar = $query->getQuery()->getGrammar();
+        $column = $grammar->wrap($this->getTable() . '.' . $column);
+        $column = $alias
+            ? $alias . '.' . $grammar->wrap($column)
+            : $grammar->wrap($this->getTable() . '.' . $column);
 
         // Filter data
         return $query->where(static function (Builder $innerQuery) use ($column, $terms) {
@@ -455,8 +465,8 @@ trait UsesScopes
 
                 // Add to query
                 $innerQuery->orWhereRaw(
-                    "? @@ to_tsquery('simple', ?)",
-                    [$column, $tsQuery]
+                    "$column @@ to_tsquery('simple', ?)",
+                    [$tsQuery]
                 );
             }
         });
