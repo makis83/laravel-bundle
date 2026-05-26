@@ -435,21 +435,24 @@ trait UsesScopes
             return $query;
         }
 
-        // Get existing columns
-        $existingColumns = $this->getConnection()
-            ->getSchemaBuilder()
-            ->getColumnListing($this->getTable());
+        // Check column name if no alias is provided
+        if ('' === trim($alias)) {
+            // Get existing columns
+            $existingColumns = $this->getConnection()
+                ->getSchemaBuilder()
+                ->getColumnListing($this->getTable());
 
-        // Validate column name
-        if (!in_array($column, $existingColumns, true)) {
-            return $query;
+            // Validate column name
+            if (!in_array($column, $existingColumns, true)) {
+                return $query;
+            }
         }
 
         // Full column name
         $grammar = $query->getQuery()->getGrammar();
         $column = $alias
             ? $alias . '.' . $grammar->wrap($column)
-            : $grammar->wrap($this->getTable() . '.' . $column);
+            : (string) $grammar->wrap($this->getTable() . '.' . $column);
 
         // Filter data
         return $query->where(static function (Builder $innerQuery) use ($column, $terms) {
